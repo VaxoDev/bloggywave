@@ -15,7 +15,7 @@ import { Input } from "@/components/ui/input"
 import { getDoc, doc } from "firebase/firestore"
 import { db } from "../lib/firebase"
 
-const adminUID = "zyCcTrjMJkPBvilOL9rtlQogyIO2"
+const adminUID = "KeupJB92W7On78VJlEMg6GMsgVC3"
 
 export function Header() {
   const { user } = useAuthContext()

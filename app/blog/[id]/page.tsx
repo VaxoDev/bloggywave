@@ -41,7 +41,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 import Image from "next/image"
 import { ChevronLeft, ChevronRight } from "lucide-react"
 
-const adminUID = "fF7FZ3pjT7Wgu4F7hPraQbAw6d03"
+const adminUID = "KeupJB92W7On78VJlEMg6GMsgVC3"
 
 interface BlogPost {
   id: string

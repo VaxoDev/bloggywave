@@ -15,7 +15,7 @@ import { Camera, Loader2 } from "lucide-react"
 import { supabase } from "../lib/supabase"
 import { SuccessPopup } from "./SuccessPopup"
 
-const adminUID = "zyCcTrjMJkPBvilOL9rtlQogyIO2"
+const adminUID = "KeupJB92W7On78VJlEMg6GMsgVC3"
 
 const UploadButton = ({ uploading }: { uploading: boolean }) => (
   <Button variant="outline" className="relative cursor-pointer" disabled={uploading} type="button">

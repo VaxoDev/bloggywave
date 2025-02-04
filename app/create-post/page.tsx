@@ -17,7 +17,7 @@ import Image from "next/image"
 import { X, Upload } from "lucide-react"
 
 const MAX_IMAGES = 5
-const ADMIN_UID = "zyCcTrjMJkPBvilOL9rtlQogyIO2"
+const ADMIN_UID = "KeupJB92W7On78VJlEMg6GMsgVC3"
 const MAX_TITLE_LENGTH = 50
 const MAX_DESCRIPTION_LENGTH = 170
 

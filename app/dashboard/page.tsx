@@ -8,7 +8,7 @@ import AdminDashboard from "../../components/AdminDashboard"
 import UserDashboard from "../../components/UserDashboard"
 import { ProtectedRoute } from "../../components/ProtectedRoute"
 
-const ADMIN_UID = "zyCcTrjMJkPBvilOL9rtlQogyIO2"
+const ADMIN_UID = "KeupJB92W7On78VJlEMg6GMsgVC3"
 
 export default function Dashboard() {
   const { user } = useAuthContext()
