@@ -1,0 +1,8 @@
+@media (hover: hover) and (pointer: fine) {
+  /* Hover styles */
+}
+
+@media (hover: none) and (pointer: coarse) {
+  /* Mobile/touch styles */
+}
+
