@@ -2,7 +2,20 @@
 
 import { useState, useEffect } from "react"
 import { useParams, useRouter } from "next/navigation"
-import { doc, getDoc, updateDoc, arrayUnion, arrayRemove, Timestamp, increment } from "firebase/firestore"
+import {
+  doc,
+  getDoc,
+  updateDoc,
+  arrayUnion,
+  arrayRemove,
+  Timestamp,
+  increment,
+  deleteDoc,
+  collection,
+  query,
+  where,
+  getDocs,
+} from "firebase/firestore"
 import { db } from "../../../lib/firebase"
 import { useAuthContext } from "../../../components/AuthProvider"
 import { motion, AnimatePresence } from "framer-motion"
@@ -25,6 +38,9 @@ import {
   Check,
   Copy,
   Clock,
+  Pencil,
+  X,
+  Upload,
 } from "lucide-react"
 import { format } from "date-fns"
 import { ConfirmationDialog } from "@/components/ConfirmationDialog"
@@ -36,16 +52,28 @@ import {
   DropdownMenuSeparator,
 } from "@/components/ui/dropdown-menu"
 import Link from "next/link"
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+  DialogDescription,
+} from "@/components/ui/dialog"
 import { Alert, AlertDescription } from "@/components/ui/alert"
 import Image from "next/image"
 import { ChevronLeft, ChevronRight } from "lucide-react"
+import { Input } from "@/components/ui/input"
+import { Label } from "@/components/ui/label"
+import { supabase } from "../../../lib/supabase"
+import { toast } from "@/components/ui/use-toast"
 
 const adminUID = "KeupJB92W7On78VJlEMg6GMsgVC3"
 
 interface BlogPost {
   id: string
   title: string
+  shortDescription?: string
   content: string
   authorName: string
   author: string
@@ -81,6 +109,11 @@ export default function BlogPost() {
   const { user } = useAuthContext()
   const router = useRouter()
   const [currentImageIndex, setCurrentImageIndex] = useState(0)
+  const [isEditMode, setIsEditMode] = useState(false)
+  const [editedTitle, setEditedTitle] = useState(post?.title || "")
+  const [editedShortDescription, setEditedShortDescription] = useState(post?.shortDescription || "")
+  const [editedContent, setEditedContent] = useState(post?.content || "")
+  const [editedImages, setEditedImages] = useState<string[]>(post?.images || [])
 
   const nextImage = () => {
     if (post?.images && currentImageIndex < post.images.length - 1) {
@@ -114,6 +147,10 @@ export default function BlogPost() {
 
         setPost(postData)
         setUserLiked(postData.likedBy.includes(user.uid))
+        setEditedTitle(postData.title)
+        setEditedShortDescription(postData.shortDescription || "")
+        setEditedContent(postData.content)
+        setEditedImages(postData.images || [])
 
         if (!postData.viewedBy?.includes(user.uid)) {
           await updateDoc(docRef, {
@@ -261,14 +298,154 @@ export default function BlogPost() {
     }
   }
 
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+
+    if (!user || (editedImages.length >= 5 && user.uid !== adminUID)) {
+      toast({
+        title: "Error",
+        description: "You can't upload more than 5 images.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      const fileExt = file.name.split(".").pop()
+      const fileName = `${Date.now()}.${fileExt}`
+      const { data, error } = await supabase.storage.from("blog_images").upload(fileName, file)
+
+      if (error) throw error
+
+      const {
+        data: { publicUrl },
+      } = supabase.storage.from("blog_images").getPublicUrl(fileName)
+      setEditedImages([...editedImages, publicUrl])
+    } catch (error) {
+      console.error("Error uploading image:", error)
+      toast({
+        title: "Error",
+        description: "Failed to upload image. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
+  const handleRemoveImage = (index: number) => {
+    setEditedImages(editedImages.filter((_, i) => i !== index))
+  }
+
+  const handleUpdate = async () => {
+    if (!post || !user) return
+    const docRef = doc(db, "posts", post.id)
+
+    // Remove old images that are not in editedImages
+    const imagesToRemove = post.images?.filter((img) => !editedImages.includes(img)) || []
+    for (const imageUrl of imagesToRemove) {
+      const fileName = imageUrl.split("/").pop()
+      if (fileName) {
+        await supabase.storage.from("blog_images").remove([fileName])
+      }
+    }
+
+    await updateDoc(docRef, {
+      title: editedTitle,
+      shortDescription: editedShortDescription,
+      content: editedContent,
+      images: editedImages,
+    })
+    setPost({
+      ...post,
+      title: editedTitle,
+      shortDescription: editedShortDescription,
+      content: editedContent,
+      images: editedImages,
+    })
+    setIsEditMode(false)
+    toast({
+      title: "Success",
+      description: "Post updated successfully",
+    })
+  }
+
+  const handleDeletePost = async () => {
+    if (!post || !user) return
+
+    // Check if the user has permission to delete the post
+    if (user.uid !== post.author && user.uid !== adminUID) {
+      toast({
+        title: "Error",
+        description: "You don't have permission to delete this post.",
+        variant: "destructive",
+      })
+      return
+    }
+
+    try {
+      // Delete images from Supabase storage
+      if (post.images && post.images.length > 0) {
+        for (const imageUrl of post.images) {
+          const fileName = imageUrl.split("/").pop()
+          if (fileName) {
+            const { error } = await supabase.storage.from("blog_images").remove([fileName])
+            if (error) throw error
+          }
+        }
+      }
+
+      // Delete the post document from Firestore
+      await deleteDoc(doc(db, "posts", post.id))
+
+      // Delete all comments associated with this post
+      const commentsQuery = query(collection(db, "comments"), where("postId", "==", post.id))
+      const commentsSnapshot = await getDocs(commentsQuery)
+      const deleteCommentPromises = commentsSnapshot.docs.map((doc) => deleteDoc(doc.ref))
+      await Promise.all(deleteCommentPromises)
+
+      // Remove the post from users' favorites
+      const usersQuery = query(collection(db, "users"), where("favorites", "array-contains", post.id))
+      const usersSnapshot = await getDocs(usersQuery)
+      const updateUserPromises = usersSnapshot.docs.map((doc) =>
+        updateDoc(doc.ref, {
+          favorites: arrayRemove(post.id),
+        }),
+      )
+      await Promise.all(updateUserPromises)
+
+      toast({
+        title: "Success",
+        description: "Post deleted successfully",
+      })
+      router.push("/blog")
+    } catch (error) {
+      console.error("Error deleting post:", error)
+      toast({
+        title: "Error",
+        description: "Failed to delete post. Please try again.",
+        variant: "destructive",
+      })
+    }
+  }
+
   if (!post) return <div className="container mx-auto px-4 py-8">Loading...</div>
   if (!post || !post.comments) return <div className="container mx-auto px-4 py-8">Post not found or loading...</div>
 
   return (
     <div className="container mx-auto px-4 py-8 max-w-4xl">
-      <Card className="mb-8 overflow-hidden">
+      <Card className="mb-8 overflow-hidden relative">
         <CardHeader className="bg-secondary p-6">
           <CardTitle className="text-3xl font-bold mb-2 text-foreground">{post.title}</CardTitle>
+          {(user?.uid === post.author || user?.uid === adminUID) && (
+            <div className="absolute top-2 right-2 flex space-x-2">
+              <Button variant="ghost" size="sm" onClick={() => setIsEditMode(true)}>
+                <Pencil className="h-4 w-4" />
+              </Button>
+              <Button variant="ghost" size="sm" onClick={handleDeletePost} className="text-destructive">
+                <Trash2 className="h-4 w-4" />
+              </Button>
+            </div>
+          )}
           <CardDescription className="flex flex-col space-y-2">
             <div className="flex items-center space-x-2 text-sm">
               <Clock className="h-4 w-4" />
@@ -511,6 +688,98 @@ export default function BlogPost() {
         confirmText="Delete"
         cancelText="Cancel"
       />
+
+      <Dialog open={isEditMode} onOpenChange={setIsEditMode}>
+        <DialogContent className="sm:max-w-[725px]">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold">Edit Post</DialogTitle>
+            <DialogDescription>Make changes to your blog post here. Click save when you're done.</DialogDescription>
+          </DialogHeader>
+          <div className="grid gap-4 py-4 max-h-[60vh] overflow-y-auto">
+            <div className="grid gap-2">
+              <Label htmlFor="title">Title</Label>
+              <Input
+                id="title"
+                value={editedTitle}
+                onChange={(e) => setEditedTitle(e.target.value)}
+                className="w-full"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="shortDescription">Short Description</Label>
+              <Textarea
+                id="shortDescription"
+                value={editedShortDescription}
+                onChange={(e) => setEditedShortDescription(e.target.value)}
+                className="w-full"
+                rows={2}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="content">Content</Label>
+              <Textarea
+                id="content"
+                value={editedContent}
+                onChange={(e) => setEditedContent(e.target.value)}
+                className="w-full"
+                rows={6}
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="images">Images</Label>
+              <div className="flex items-center gap-4">
+                <Input
+                  id="images"
+                  type="file"
+                  accept="image/*"
+                  onChange={handleImageUpload}
+                  disabled={editedImages.length >= 5 && user?.uid !== adminUID}
+                  className="hidden"
+                />
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={() => document.getElementById("images")?.click()}
+                  disabled={editedImages.length >= 5 && user?.uid !== adminUID}
+                  className="w-full"
+                >
+                  <Upload className="h-4 w-4 mr-2" />
+                  Choose Image
+                </Button>
+              </div>
+              <div className="grid grid-cols-5 gap-2 mt-2">
+                {editedImages.map((image, index) => (
+                  <div key={index} className="relative group">
+                    <Image
+                      src={image || "/placeholder.svg"}
+                      alt={`Image ${index + 1}`}
+                      width={60}
+                      height={60}
+                      className="object-cover rounded-md w-full h-auto"
+                    />
+                    <Button
+                      variant="destructive"
+                      size="icon"
+                      className="absolute top-0 right-0 h-5 w-5 opacity-0 group-hover:opacity-100 transition-opacity"
+                      onClick={() => handleRemoveImage(index)}
+                    >
+                      <X className="h-3 w-3" />
+                    </Button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={() => setIsEditMode(false)}>
+              Cancel
+            </Button>
+            <Button type="submit" onClick={handleUpdate}>
+              Save Changes
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
   )
 }
