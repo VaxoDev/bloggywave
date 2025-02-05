@@ -21,7 +21,7 @@ export default function RootLayout({
     <html lang="en" suppressHydrationWarning>
       <head>
         <link href="https://fonts.googleapis.com/css2?family=Dancing+Script:wght@700&display=swap" rel="stylesheet" />
-        <link rel="icon" href="/logo.jpg" />
+        <link rel="icon" href="placeholder-logo.jpg" />
 
       </head>
       <body className={inter.className}>

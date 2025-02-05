@@ -24,7 +24,6 @@ export default function Home() {
         <h1 className="text-4xl md:text-6xl font-bold mb-6">Welcome to BloggyWave</h1>
         <p className="text-xl mb-8 text-muted-foreground">Share your stories, ideas, and passion with the world</p>
         <div className="relative w-full h-64 md:h-96 mb-8 rounded-lg overflow-hidden">
-          <Image src="/hero-image.jpg" alt="Writing inspiration" layout="fill" objectFit="cover" className="rounded-lg" />
         </div>
         {!user && (
           <Link href="/login">
